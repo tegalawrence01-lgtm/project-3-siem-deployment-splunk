@@ -1,0 +1,42 @@
+# Project 3 - SIEM Detection Queries
+# These searches were used to investigate controlled security events.
+
+# 1. Windows and Ubuntu log ingestion
+index=main
+| stats count by host sourcetype
+| sort - count
+
+
+# 2. SSH brute-force detection
+index=main host="Project3-Ubuntu" sourcetype="linux_secure" "Failed password"
+| stats count as failed_attempts by host
+| where failed_attempts >= 3
+
+
+# 3. Unauthorized local administrator account detection
+index=main host="Lawrence" sourcetype="WinEventLog:Security" (EventCode=4720 OR EventCode=4732)
+| search "LabAdminX"
+| table _time EventCode Account_Name Group_Name
+| sort _time
+
+
+# 4. Controlled PowerShell activity detection
+index=main host="Lawrence" sourcetype="WinEventLog:Microsoft-Windows-PowerShell/Operational" EventCode=4104
+| search "Project3_Attack3_Controlled_Command"
+| stats count as detected_events by host
+| where detected_events >= 1
+
+
+# 5. Combined investigation of the three controlled events
+(index=main host="Project3-Ubuntu" sourcetype="linux_secure" "Failed password")
+OR
+(index=main host="Lawrence" sourcetype="WinEventLog:Security" (EventCode=4720 OR EventCode=4732) "LabAdminX")
+OR
+(index=main host="Lawrence" sourcetype="WinEventLog:Microsoft-Windows-PowerShell/Operational" EventCode=4104 "Project3_Attack3_Controlled_Command")
+| eval Attack=case(
+    sourcetype="linux_secure","Attack 1 - SSH brute-force",
+    EventCode=4720 OR EventCode=4732,"Attack 2 - Local admin account",
+    EventCode=4104,"Attack 3 - PowerShell command"
+)
+| table _time host Attack EventCode sourcetype
+| sort _time
